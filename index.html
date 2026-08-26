@@ -148,7 +148,7 @@
   }
   #toolbar button {
     font-size: 15px;
-    font-weight: 500;
+    font-weight: 700;
     padding: 14px;
     border-radius: 50%;
     border: 1px solid var(--border);
@@ -157,12 +157,26 @@
     cursor: pointer;
     width: 64px;
     height: 64px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   #toolbar button.active {
     background: var(--accent);
-    color: #fff;
+    color: #ffffff;
+    border-color: var(--accent);
   }
-  #modal-backdrop, #confirm-backdrop {
+  #toolbar #reset-btn {
+    margin-top: 70px;
+    background: #d9483f;
+    color: #ffffff;
+    border-color: #d9483f;
+  }
+  .hidden {
+    display: none !important;
+  }
+  #modal-backdrop, #confirm-backdrop, #reset-confirm-backdrop {
     display: none;
     position: fixed;
     inset: 0;
@@ -172,7 +186,7 @@
     z-index: 10;
     padding: 16px;
   }
-  #modal-backdrop.open, #confirm-backdrop.open { display: flex; }
+  #modal-backdrop.open, #confirm-backdrop.open, #reset-confirm-backdrop.open { display: flex; }
   #modal, .modal-box {
     background: var(--card);
     border-radius: 14px;
@@ -239,6 +253,17 @@
 
 <div id="toolbar">
   <button id="edit-toggle">Edit</button>
+  <button id="reset-btn" class="hidden">Reset</button>
+</div>
+
+<div id="reset-confirm-backdrop">
+  <div class="modal-box">
+    <h2 id="reset-confirm-title" style="text-align:center;">Resetting will reinstate all original shortcuts. Confirm?</h2>
+    <div class="row">
+      <button id="reset-cancel-btn">Cancel</button>
+      <button id="reset-confirm-btn" class="primary">Reset</button>
+    </div>
+  </div>
 </div>
 
 <div id="modal-backdrop">
@@ -446,11 +471,38 @@
     closeModal();
   };
 
+  const resetBtn = document.getElementById('reset-btn');
+  const resetConfirmBackdrop = document.getElementById('reset-confirm-backdrop');
+  const resetCancelBtn = document.getElementById('reset-cancel-btn');
+  const resetConfirmBtn = document.getElementById('reset-confirm-btn');
+
   editToggle.onclick = () => {
     editMode = !editMode;
     editToggle.classList.toggle('active', editMode);
     editToggle.textContent = editMode ? 'Done' : 'Edit';
+    resetBtn.classList.toggle('hidden', !editMode);
     render();
+  };
+
+  resetBtn.onclick = () => {
+    resetConfirmBackdrop.classList.add('open');
+  };
+
+  resetCancelBtn.onclick = () => {
+    resetConfirmBackdrop.classList.remove('open');
+  };
+
+  resetConfirmBackdrop.onclick = (e) => {
+    if (e.target === resetConfirmBackdrop) {
+      resetConfirmBackdrop.classList.remove('open');
+    }
+  };
+
+  resetConfirmBtn.onclick = () => {
+    shortcuts = JSON.parse(JSON.stringify(DEFAULTS));
+    save();
+    render();
+    resetConfirmBackdrop.classList.remove('open');
   };
 
   function save() {
