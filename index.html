@@ -138,6 +138,40 @@
   .add-card .label {
     color: #ffffff;
   }
+  .folder-contents {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: -2px 0 0 22px;
+    padding: 14px 0 2px 16px;
+    border-left: 3px solid var(--accent);
+  }
+  .color-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 6px;
+  }
+  .color-swatch {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12);
+  }
+  .color-swatch.selected {
+    border-color: #1f1f1d;
+  }
+  #modal select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-size: 14px;
+    background: #fff;
+    color: var(--text);
+  }
   #toolbar {
     max-width: 480px;
     margin: 70px auto 20px;
@@ -182,7 +216,7 @@
     opacity: 0.7;
     margin-top: 14px;
   }
-  #modal-backdrop, #confirm-backdrop, #reset-confirm-backdrop {
+  #modal-backdrop, #confirm-backdrop, #reset-confirm-backdrop, #folder-modal-backdrop, #import-confirm-backdrop {
     display: none;
     position: fixed;
     inset: 0;
@@ -192,7 +226,7 @@
     z-index: 10;
     padding: 16px;
   }
-  #modal-backdrop.open, #confirm-backdrop.open, #reset-confirm-backdrop.open { display: flex; }
+  #modal-backdrop.open, #confirm-backdrop.open, #reset-confirm-backdrop.open, #folder-modal-backdrop.open, #import-confirm-backdrop.open { display: flex; }
   #modal, .modal-box {
     background: var(--card);
     border-radius: 14px;
@@ -263,9 +297,12 @@
 
 <div id="toolbar">
   <button id="edit-toggle">Edit</button>
+  <button id="export-btn" class="hidden">Save</button>
+  <button id="import-btn" class="hidden">Load</button>
   <button id="reset-btn" class="hidden">Reset</button>
-  <div id="version-label" class="hidden">v2.1</div>
+  <div id="version-label" class="hidden">v2.4</div>
 </div>
+<input type="file" id="import-file-input" accept="application/json" style="display:none">
 
 <div id="reset-confirm-backdrop">
   <div class="modal-box">
@@ -278,6 +315,16 @@
   </div>
 </div>
 
+<div id="import-confirm-backdrop">
+  <div class="modal-box">
+    <h2 style="text-align:center;">Replace current shortcuts with the loaded file?</h2>
+    <div class="row">
+      <button id="import-cancel-btn">Cancel</button>
+      <button id="import-confirm-btn" class="primary">Load</button>
+    </div>
+  </div>
+</div>
+
 <div id="modal-backdrop">
   <div id="modal" class="modal-box">
     <h2 id="modal-title">Add shortcut</h2>
@@ -285,10 +332,29 @@
     <input id="f-name" type="text" placeholder="e.g. Gmail" maxlength="30">
     <label for="f-url">Web address</label>
     <input id="f-url" type="text" placeholder="e.g. gmail.com">
+    <label for="f-folder">Folder</label>
+    <select id="f-folder"></select>
+    <label>Colour</label>
+    <div id="shortcut-color-picker" class="color-picker"></div>
     <div id="error"></div>
     <div class="row">
       <button id="cancel-btn">Cancel</button>
       <button id="save-btn" class="primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="folder-modal-backdrop">
+  <div class="modal-box">
+    <h2 id="folder-modal-title">Add folder</h2>
+    <label for="folder-name">Name</label>
+    <input id="folder-name" type="text" placeholder="e.g. Reports" maxlength="30">
+    <label>Colour</label>
+    <div id="folder-color-picker" class="color-picker"></div>
+    <div id="folder-error"></div>
+    <div class="row">
+      <button id="folder-cancel-btn">Cancel</button>
+      <button id="folder-save-btn" class="primary">Save</button>
     </div>
   </div>
 </div>
@@ -319,27 +385,28 @@
   const confirmTitle = document.getElementById('confirm-title');
   const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
   const confirmRemoveBtn = document.getElementById('confirm-remove-btn');
-  let pendingRemoveIndex = null;
+  let pendingRemove = null; // { folderIndex: null|number, index: number }
 
   confirmCancelBtn.onclick = () => {
-    pendingRemoveIndex = null;
+    pendingRemove = null;
     confirmBackdrop.classList.remove('open');
   };
 
   confirmBackdrop.onclick = (e) => {
     if (e.target === confirmBackdrop) {
-      pendingRemoveIndex = null;
+      pendingRemove = null;
       confirmBackdrop.classList.remove('open');
     }
   };
 
   confirmRemoveBtn.onclick = () => {
-    if (pendingRemoveIndex !== null) {
-      shortcuts.splice(pendingRemoveIndex, 1);
+    if (pendingRemove) {
+      const arr = pendingRemove.folderIndex === null ? shortcuts : shortcuts[pendingRemove.folderIndex].items;
+      arr.splice(pendingRemove.index, 1);
       save();
       render();
     }
-    pendingRemoveIndex = null;
+    pendingRemove = null;
     confirmBackdrop.classList.remove('open');
   };
 
@@ -358,6 +425,37 @@
   let shortcuts = [];
   let editMode = false;
   let editingIndex = null;
+  let editingFolderIndex = null; // null = top-level shortcut being edited/added
+  let editingFolderMetaIndex = null; // index of folder being edited via folder modal, null = new folder
+  let selectedFolderColor = null;
+  let selectedShortcutColor = null;
+  const expandedFolders = new Set(); // holds folder ids that are currently expanded
+
+  const DEFAULT_COLOR = '#4a90d9';
+  const COLOR_OPTIONS = [
+    null,
+    '#10275c',
+    '#14432a',
+    '#3f3f3f',
+    '#3a0a0a',
+    '#c92a2a',
+    '#39ff14',
+    '#ffea00',
+    '#ff5f1f'
+  ];
+
+  function getContrastTextColor(hex) {
+    const c = hex.replace('#', '');
+    const r = parseInt(c.substr(0, 2), 16);
+    const g = parseInt(c.substr(2, 2), 16);
+    const b = parseInt(c.substr(4, 2), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.6 ? '#1f1f1d' : '#ffffff';
+  }
+
+  function genId() {
+    return 'f_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
 
   const SLACK_TEAM_ID = 'T050FEWKDLH';
 
@@ -375,92 +473,227 @@
     return u;
   }
 
+  function createOrderButtons(arr, i, label) {
+    const orderBtns = document.createElement('div');
+    orderBtns.className = 'order-btns';
+
+    const upBtn = document.createElement('button');
+    upBtn.textContent = '▲';
+    upBtn.setAttribute('aria-label', 'Move ' + label + ' up');
+    upBtn.disabled = i === 0;
+    upBtn.onclick = (e) => {
+      e.stopPropagation();
+      [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
+      save();
+      render();
+    };
+
+    const downBtn = document.createElement('button');
+    downBtn.textContent = '▼';
+    downBtn.setAttribute('aria-label', 'Move ' + label + ' down');
+    downBtn.disabled = i === arr.length - 1;
+    downBtn.onclick = (e) => {
+      e.stopPropagation();
+      [arr[i + 1], arr[i]] = [arr[i], arr[i + 1]];
+      save();
+      render();
+    };
+
+    orderBtns.appendChild(upBtn);
+    orderBtns.appendChild(downBtn);
+    return orderBtns;
+  }
+
+  function buildShortcutCard(item, index, folderIndex) {
+    const arr = folderIndex === null ? shortcuts : shortcuts[folderIndex].items;
+
+    const card = document.createElement('div');
+    card.className = 'btn';
+    const bgColor = item.color || DEFAULT_COLOR;
+    card.style.background = bgColor;
+    const textColor = getContrastTextColor(bgColor);
+
+    const orderBtns = createOrderButtons(arr, index, item.name);
+    orderBtns.querySelectorAll('button').forEach((b) => { b.style.color = textColor; });
+
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = item.name;
+    label.style.color = textColor;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove';
+    removeBtn.textContent = '✕';
+    removeBtn.style.color = textColor;
+    removeBtn.setAttribute('aria-label', 'Remove ' + item.name);
+    removeBtn.onclick = (e) => {
+      e.stopPropagation();
+      pendingRemove = { folderIndex, index };
+      confirmTitle.textContent = 'Remove "' + item.name + '"?';
+      confirmBackdrop.classList.add('open');
+    };
+
+    card.appendChild(orderBtns);
+    card.appendChild(label);
+    card.appendChild(removeBtn);
+
+    card.onclick = () => {
+      if (editMode) {
+        openModal(folderIndex, index);
+      } else {
+        window.open(item.url, '_blank');
+      }
+    };
+
+    return card;
+  }
+
+  function buildFolderCard(folder, index) {
+    const card = document.createElement('div');
+    card.className = 'btn folder-card';
+    const bgColor = folder.color || DEFAULT_COLOR;
+    card.style.background = bgColor;
+    const textColor = getContrastTextColor(bgColor);
+
+    const orderBtns = createOrderButtons(shortcuts, index, folder.name);
+    orderBtns.querySelectorAll('button').forEach((b) => { b.style.color = textColor; });
+
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = folder.name;
+    label.style.color = textColor;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove';
+    removeBtn.textContent = '✕';
+    removeBtn.style.color = textColor;
+    removeBtn.setAttribute('aria-label', 'Remove folder ' + folder.name);
+    removeBtn.onclick = (e) => {
+      e.stopPropagation();
+      pendingRemove = { folderIndex: null, index };
+      const count = folder.items.length;
+      confirmTitle.textContent = count
+        ? 'Remove "' + folder.name + '" and its ' + count + ' shortcut' + (count === 1 ? '' : 's') + '?'
+        : 'Remove "' + folder.name + '"?';
+      confirmBackdrop.classList.add('open');
+    };
+
+    card.appendChild(orderBtns);
+    card.appendChild(label);
+    card.appendChild(removeBtn);
+
+    card.onclick = () => {
+      if (editMode) {
+        openFolderModal(index);
+      } else {
+        toggleFolder(folder.id);
+      }
+    };
+
+    return card;
+  }
+
+  function toggleFolder(id) {
+    if (expandedFolders.has(id)) {
+      expandedFolders.delete(id);
+    } else {
+      expandedFolders.add(id);
+    }
+    render();
+  }
+
   function render() {
     grid.innerHTML = '';
     grid.classList.toggle('edit-mode', editMode);
 
-    shortcuts.forEach((s, i) => {
-      const card = document.createElement('div');
-      card.className = 'btn';
+    shortcuts.forEach((item, i) => {
+      if (item.type === 'folder') {
+        grid.appendChild(buildFolderCard(item, i));
 
-      const orderBtns = document.createElement('div');
-      orderBtns.className = 'order-btns';
+        if (expandedFolders.has(item.id)) {
+          const contents = document.createElement('div');
+          contents.className = 'folder-contents';
+          contents.style.borderLeftColor = item.color || DEFAULT_COLOR;
 
-      const upBtn = document.createElement('button');
-      upBtn.textContent = '▲';
-      upBtn.setAttribute('aria-label', 'Move ' + s.name + ' up');
-      upBtn.disabled = i === 0;
-      upBtn.onclick = (e) => {
-        e.stopPropagation();
-        [shortcuts[i - 1], shortcuts[i]] = [shortcuts[i], shortcuts[i - 1]];
-        save();
-        render();
-      };
+          item.items.forEach((child, j) => {
+            contents.appendChild(buildShortcutCard(child, j, i));
+          });
 
-      const downBtn = document.createElement('button');
-      downBtn.textContent = '▼';
-      downBtn.setAttribute('aria-label', 'Move ' + s.name + ' down');
-      downBtn.disabled = i === shortcuts.length - 1;
-      downBtn.onclick = (e) => {
-        e.stopPropagation();
-        [shortcuts[i + 1], shortcuts[i]] = [shortcuts[i], shortcuts[i + 1]];
-        save();
-        render();
-      };
+          if (editMode) {
+            const addChildCard = document.createElement('div');
+            addChildCard.className = 'btn add-card';
+            addChildCard.innerHTML = '<div class="label">+ Add shortcut</div>';
+            addChildCard.onclick = () => openModal(i, null);
+            contents.appendChild(addChildCard);
+          }
 
-      orderBtns.appendChild(upBtn);
-      orderBtns.appendChild(downBtn);
-
-      const label = document.createElement('div');
-      label.className = 'label';
-      label.textContent = s.name;
-
-      const removeBtn = document.createElement('button');
-      removeBtn.className = 'remove';
-      removeBtn.textContent = '✕';
-      removeBtn.setAttribute('aria-label', 'Remove ' + s.name);
-      removeBtn.onclick = (e) => {
-        e.stopPropagation();
-        pendingRemoveIndex = i;
-        confirmTitle.textContent = 'Remove "' + s.name + '"?';
-        confirmBackdrop.classList.add('open');
-      };
-
-      card.appendChild(orderBtns);
-      card.appendChild(label);
-      card.appendChild(removeBtn);
-
-      card.onclick = () => {
-        if (editMode) {
-          openModal(i);
-        } else {
-          window.open(s.url, '_blank');
+          grid.appendChild(contents);
         }
-      };
-
-      grid.appendChild(card);
+      } else {
+        grid.appendChild(buildShortcutCard(item, i, null));
+      }
     });
 
     if (editMode) {
       const addCard = document.createElement('div');
       addCard.className = 'btn add-card';
       addCard.innerHTML = '<div class="label">+ Add shortcut</div>';
-      addCard.onclick = () => openModal(null);
+      addCard.onclick = () => openModal(null, null);
       grid.appendChild(addCard);
+
+      const addFolderCard = document.createElement('div');
+      addFolderCard.className = 'btn add-card';
+      addFolderCard.innerHTML = '<div class="label">+ Add folder</div>';
+      addFolderCard.onclick = () => openFolderModal(null);
+      grid.appendChild(addFolderCard);
     }
   }
 
-  function openModal(index) {
+  const folderSelect = document.getElementById('f-folder');
+  const shortcutColorPicker = document.getElementById('shortcut-color-picker');
+
+  function populateFolderSelect(currentFolderIndex) {
+    folderSelect.innerHTML = '';
+    const noneOpt = document.createElement('option');
+    noneOpt.value = '';
+    noneOpt.textContent = 'No folder';
+    folderSelect.appendChild(noneOpt);
+
+    shortcuts.forEach((item) => {
+      if (item.type === 'folder') {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        opt.textContent = item.name;
+        folderSelect.appendChild(opt);
+      }
+    });
+
+    folderSelect.value = currentFolderIndex === null ? '' : shortcuts[currentFolderIndex].id;
+  }
+
+  const paintShortcutColorPicker = createColorPicker(
+    shortcutColorPicker,
+    () => selectedShortcutColor,
+    (c) => { selectedShortcutColor = c; }
+  );
+
+  function openModal(folderIndex, index) {
+    editingFolderIndex = folderIndex;
     editingIndex = index;
     if (index === null) {
       modalTitle.textContent = 'Add shortcut';
       nameInput.value = '';
       urlInput.value = '';
+      selectedShortcutColor = null;
     } else {
       modalTitle.textContent = 'Edit shortcut';
-      nameInput.value = shortcuts[index].name;
-      urlInput.value = shortcuts[index].url;
+      const arr = folderIndex === null ? shortcuts : shortcuts[folderIndex].items;
+      nameInput.value = arr[index].name;
+      urlInput.value = arr[index].url;
+      selectedShortcutColor = arr[index].color || null;
     }
+    populateFolderSelect(folderIndex);
+    paintShortcutColorPicker();
     errorEl.style.display = 'none';
     modalBackdrop.classList.add('open');
     nameInput.focus();
@@ -469,6 +702,7 @@
   function closeModal() {
     modalBackdrop.classList.remove('open');
     editingIndex = null;
+    editingFolderIndex = null;
   }
 
   document.getElementById('cancel-btn').onclick = closeModal;
@@ -482,15 +716,110 @@
       errorEl.style.display = 'block';
       return;
     }
-    const entry = { name, url: normalizeUrl(rawUrl) };
-    if (editingIndex === null) {
-      shortcuts.push(entry);
+    const entry = { name, url: normalizeUrl(rawUrl), color: selectedShortcutColor };
+    const targetFolderId = folderSelect.value;
+
+    let newArr;
+    if (targetFolderId === '') {
+      newArr = shortcuts;
     } else {
-      shortcuts[editingIndex] = entry;
+      const folder = shortcuts.find((it) => it.type === 'folder' && it.id === targetFolderId);
+      newArr = folder ? folder.items : shortcuts;
     }
+
+    if (editingIndex !== null) {
+      const oldArr = editingFolderIndex === null ? shortcuts : shortcuts[editingFolderIndex].items;
+      if (oldArr === newArr) {
+        // Same folder as before — replace in place so it keeps its position.
+        newArr[editingIndex] = entry;
+      } else {
+        // Moved to a different folder (or in/out of one) — remove and append at the new location.
+        oldArr.splice(editingIndex, 1);
+        newArr.push(entry);
+      }
+    } else {
+      newArr.push(entry);
+    }
+
     save();
     render();
     closeModal();
+  };
+
+  const folderModalBackdrop = document.getElementById('folder-modal-backdrop');
+  const folderModalTitle = document.getElementById('folder-modal-title');
+  const folderNameInput = document.getElementById('folder-name');
+  const folderColorPicker = document.getElementById('folder-color-picker');
+  const folderErrorEl = document.getElementById('folder-error');
+
+  function createColorPicker(container, getColor, setColor) {
+    function paint() {
+      container.innerHTML = '';
+      COLOR_OPTIONS.forEach((color) => {
+        const swatch = document.createElement('div');
+        swatch.className = 'color-swatch';
+        swatch.style.background = color || DEFAULT_COLOR;
+        swatch.setAttribute('aria-label', color ? 'Select colour' : 'Default colour');
+        if (getColor() === color) swatch.classList.add('selected');
+        swatch.onclick = () => {
+          setColor(color);
+          paint();
+        };
+        container.appendChild(swatch);
+      });
+    }
+    return paint;
+  }
+
+  const paintFolderColorPicker = createColorPicker(
+    folderColorPicker,
+    () => selectedFolderColor,
+    (c) => { selectedFolderColor = c; }
+  );
+
+  function openFolderModal(index) {
+    editingFolderMetaIndex = index;
+    if (index === null) {
+      folderModalTitle.textContent = 'Add folder';
+      folderNameInput.value = '';
+      selectedFolderColor = null;
+    } else {
+      const folder = shortcuts[index];
+      folderModalTitle.textContent = 'Edit folder';
+      folderNameInput.value = folder.name;
+      selectedFolderColor = folder.color || null;
+    }
+    paintFolderColorPicker();
+    folderErrorEl.style.display = 'none';
+    folderModalBackdrop.classList.add('open');
+    folderNameInput.focus();
+  }
+
+  function closeFolderModal() {
+    folderModalBackdrop.classList.remove('open');
+    editingFolderMetaIndex = null;
+  }
+
+  document.getElementById('folder-cancel-btn').onclick = closeFolderModal;
+  folderModalBackdrop.onclick = (e) => { if (e.target === folderModalBackdrop) closeFolderModal(); };
+
+  document.getElementById('folder-save-btn').onclick = () => {
+    const name = folderNameInput.value.trim();
+    if (!name) {
+      folderErrorEl.textContent = 'Enter a folder name.';
+      folderErrorEl.style.display = 'block';
+      return;
+    }
+    if (editingFolderMetaIndex === null) {
+      shortcuts.unshift({ type: 'folder', id: genId(), name, color: selectedFolderColor, items: [] });
+    } else {
+      const folder = shortcuts[editingFolderMetaIndex];
+      folder.name = name;
+      folder.color = selectedFolderColor;
+    }
+    save();
+    render();
+    closeFolderModal();
   };
 
   const resetBtn = document.getElementById('reset-btn');
@@ -498,12 +827,21 @@
   const resetCancelBtn = document.getElementById('reset-cancel-btn');
   const resetConfirmBtn = document.getElementById('reset-confirm-btn');
   const versionLabel = document.getElementById('version-label');
+  const exportBtn = document.getElementById('export-btn');
+  const importBtn = document.getElementById('import-btn');
+  const importFileInput = document.getElementById('import-file-input');
+  const importConfirmBackdrop = document.getElementById('import-confirm-backdrop');
+  const importCancelBtn = document.getElementById('import-cancel-btn');
+  const importConfirmBtn = document.getElementById('import-confirm-btn');
+  let pendingImportData = null;
 
   editToggle.onclick = () => {
     editMode = !editMode;
     editToggle.classList.toggle('active', editMode);
     editToggle.textContent = editMode ? 'Done' : 'Edit';
     resetBtn.classList.toggle('hidden', !editMode);
+    exportBtn.classList.toggle('hidden', !editMode);
+    importBtn.classList.toggle('hidden', !editMode);
     versionLabel.classList.toggle('hidden', !editMode);
     render();
   };
@@ -527,6 +865,80 @@
     save();
     render();
     resetConfirmBackdrop.classList.remove('open');
+  };
+
+  function isValidShortcutsData(data) {
+    if (!Array.isArray(data)) return false;
+    return data.every((item) => {
+      if (!item || typeof item.name !== 'string') return false;
+      if (item.type === 'folder') {
+        return Array.isArray(item.items) && item.items.every((child) => child && typeof child.name === 'string' && typeof child.url === 'string');
+      }
+      return typeof item.url === 'string';
+    });
+  }
+
+  exportBtn.onclick = () => {
+    const dataStr = JSON.stringify(shortcuts, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = 'mcleod-shortcuts-' + dateStr + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    statusEl.textContent = 'Shortcuts saved to file.';
+  };
+
+  importBtn.onclick = () => {
+    importFileInput.value = '';
+    importFileInput.click();
+  };
+
+  importFileInput.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target.result);
+        if (!isValidShortcutsData(parsed)) throw new Error('Invalid format');
+        parsed.forEach((item) => {
+          if (item.type === 'folder' && !item.id) item.id = genId();
+        });
+        pendingImportData = parsed;
+        importConfirmBackdrop.classList.add('open');
+      } catch (err) {
+        statusEl.textContent = "Could not read that file — is it a valid shortcuts export?";
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  importCancelBtn.onclick = () => {
+    pendingImportData = null;
+    importConfirmBackdrop.classList.remove('open');
+  };
+
+  importConfirmBackdrop.onclick = (e) => {
+    if (e.target === importConfirmBackdrop) {
+      pendingImportData = null;
+      importConfirmBackdrop.classList.remove('open');
+    }
+  };
+
+  importConfirmBtn.onclick = () => {
+    if (pendingImportData) {
+      shortcuts = pendingImportData;
+      save();
+      render();
+      statusEl.textContent = 'Shortcuts loaded.';
+    }
+    pendingImportData = null;
+    importConfirmBackdrop.classList.remove('open');
   };
 
   function save() {
