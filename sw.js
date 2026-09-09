@@ -1,5 +1,5 @@
 // Service worker — caches the app shell so it still loads with no signal.
-const CACHE_NAME = 'mcleod-shortcuts-v2.4';
+const CACHE_NAME = 'mcleod-shortcuts-v2.4.1';
 const APP_SHELL = [
   './',
   './index.html',

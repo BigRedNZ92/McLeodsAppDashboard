@@ -300,7 +300,7 @@
   <button id="export-btn" class="hidden">Save</button>
   <button id="import-btn" class="hidden">Load</button>
   <button id="reset-btn" class="hidden">Reset</button>
-  <div id="version-label" class="hidden">v2.4</div>
+  <div id="version-label" class="hidden">v2.4.1</div>
 </div>
 <input type="file" id="import-file-input" accept="application/json" style="display:none">
 
@@ -846,26 +846,45 @@
     render();
   };
 
-  resetBtn.onclick = () => {
+  // iOS Safari (especially in standalone/home-screen PWA mode) can fail to fire a
+  // plain "click" event on a button inside a just-opened modal. Binding both
+  // "touchend" and "click", with a short de-dupe guard, makes taps register
+  // reliably everywhere without changing behaviour on desktop/Android.
+  function bindTap(el, handler) {
+    let lastFired = 0;
+    const fire = (e) => {
+      const now = Date.now();
+      if (now - lastFired < 400) return;
+      lastFired = now;
+      handler(e);
+    };
+    el.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      fire(e);
+    }, { passive: false });
+    el.addEventListener('click', fire);
+  }
+
+  bindTap(resetBtn, () => {
     resetConfirmBackdrop.classList.add('open');
-  };
+  });
 
-  resetCancelBtn.onclick = () => {
+  bindTap(resetCancelBtn, () => {
     resetConfirmBackdrop.classList.remove('open');
-  };
+  });
 
-  resetConfirmBackdrop.onclick = (e) => {
+  bindTap(resetConfirmBackdrop, (e) => {
     if (e.target === resetConfirmBackdrop) {
       resetConfirmBackdrop.classList.remove('open');
     }
-  };
+  });
 
-  resetConfirmBtn.onclick = () => {
+  bindTap(resetConfirmBtn, () => {
     shortcuts = JSON.parse(JSON.stringify(DEFAULTS));
     save();
     render();
     resetConfirmBackdrop.classList.remove('open');
-  };
+  });
 
   function isValidShortcutsData(data) {
     if (!Array.isArray(data)) return false;
