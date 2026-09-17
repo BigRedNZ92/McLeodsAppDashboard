@@ -482,7 +482,7 @@
     <button id="check-updates-btn" class="hidden">Check for Updates</button>
   </div>
   <button id="reset-btn" class="hidden">Reset</button>
-  <div id="version-label" class="hidden">v3.0</div>
+  <div id="version-label" class="hidden">v3.0.1</div>
 </div>
 <input type="file" id="import-file-input" accept="application/json" style="display:none">
 
@@ -1070,8 +1070,8 @@
   let dispatchMode = 'call'; // 'call' (from the Dispatch button) or 'setDefault' (from the edit menu)
 
   const DISPATCH_NUMBERS = {
-    hiabs: 'tel:+6475759715',
-    cranes: 'tel:+6475742375',
+    hiabs: 'tel:+6475474895',
+    cranes: 'tel:+6477880451',
     transport: 'tel:+6479814268'
   };
   const DISPATCH_LABELS = {
@@ -1087,32 +1087,36 @@
     {
       title: null,
       items: [
-        { name: 'Site Audit', url: 'http://mcleod.formstack.com/forms/monthly_site_checklist' },
-        { name: 'Driver Audit', url: 'http://mcleod.formstack.com/forms/driver_performance_audit' },
-        { name: 'SOPs', url: 'https://mcleodnz.slack.com/docs/T050FEWKDLH/F07CRTSKBNV' },
-        { name: 'Competency Assessment', url: 'https://mcleod.knack.com/safe-team#new-competency-assessment3/' },
-        { name: 'Compass', url: 'https://mcleodnz.slack.com/docs/T050FEWKDLH/F0788UJ3FAQ', color: '#10275c' },
-        { name: 'Mini Report', url: 'http://mcleod.formstack.com/forms/mini_report_form', color: '#c92a2a' },
         { name: 'Buddy Training', url: 'https://mcleod.knack.com/safe-team#new-buddy-training/' },
+        { name: 'Compass', url: 'https://mcleodnz.slack.com/docs/T050FEWKDLH/F0788UJ3FAQ', color: '#10275c' },
+        { name: 'Competency Assessment', url: 'https://mcleod.knack.com/safe-team#new-competency-assessment3/' },
+        { name: 'Crane Op Audit', url: 'http://mcleod.formstack.com/forms/crane_operator_audit' },
+        { name: 'Crane Safety Audit', url: 'https://mcleod.formstack.com/forms/crane_safety_audit' },
+        { name: 'Driver Audit', url: 'http://mcleod.formstack.com/forms/driver_performance_audit' },
+        { name: 'First Aid Kit Audit', url: 'http://mcleod.formstack.com/forms/first_aid_kit_audit' },
+        { name: 'HSE Forms', url: 'https://mcleodnz.slack.com/docs/T050FEWKDLH/F07CFMR1DA8' },
+        { name: 'Maintenance Report', url: 'http://mcleod.formstack.com/forms/cranes_group_maintenance_report' },
+        { name: 'Mini Report', url: 'http://mcleod.formstack.com/forms/mini_report_form', color: '#c92a2a' },
+        { name: 'Passenger Induction', url: 'https://mcleodnz.slack.com/docs/T050FEWKDLH/F07C5AU0XP0' },
         { name: 'Record of Induction', url: 'https://mcleod.knack.com/safe-team#new-induction/' },
+        { name: 'Reeving Check List', url: 'https://mcleod.formstack.com/forms/reeving' },
         { name: 'Risk Register', url: 'https://mcleodnz.slack.com/docs/T050FEWKDLH/F07JJSBHUD7', color: '#3f3f3f' },
         { name: 'Safe Team', url: 'https://mcleod.knack.com/safe-team#mcleod/' },
-        { name: 'Crane Op Audit', url: 'http://mcleod.formstack.com/forms/crane_operator_audit' },
-        { name: 'Reeving Check List', url: 'https://mcleod.formstack.com/forms/reeving' },
-        { name: 'Suggestion for Improvement', url: 'http://mcleod.formstack.com/forms/suggestion_for_improvement' },
-        { name: 'Passenger Induction', url: 'https://mcleodnz.slack.com/docs/T050FEWKDLH/F07C5AU0XP0' },
-        { name: 'Spider Crane', url: 'https://mcleodnz.slack.com/docs/T050FEWKDLH/F07DHAZMQ1F' }
+        { name: 'Site Audit', url: 'http://mcleod.formstack.com/forms/monthly_site_checklist' },
+        { name: 'SOPs', url: 'https://mcleodnz.slack.com/docs/T050FEWKDLH/F07CRTSKBNV' },
+        { name: 'Spider Crane', url: 'https://mcleodnz.slack.com/docs/T050FEWKDLH/F07DHAZMQ1F' },
+        { name: 'Suggestion for Improvement', url: 'http://mcleod.formstack.com/forms/suggestion_for_improvement' }
       ]
     },
     {
       title: 'Channels',
       items: [
+        { name: 'Cranes Dispatch', url: 'https://mcleodnz.slack.com/archives/C05TF9BVC74', color: '#ffea00' },
         { name: 'General', url: 'https://mcleodnz.slack.com/archives/C0505AH3YHJ', color: '#ffea00' },
         { name: 'Hamilton', url: 'https://mcleodnz.slack.com/archives/C06T3D3R4JZ', color: '#ffea00' },
+        { name: 'Hiab Dispatch', url: 'https://mcleodnz.slack.com/archives/C05U4952SD6', color: '#ffea00' },
         { name: 'Tauranga Cranes', url: 'https://mcleodnz.slack.com/archives/C05TTU9LVT3', color: '#ffea00' },
-        { name: 'Tauranga Hiabs', url: 'https://mcleodnz.slack.com/archives/C05TF6U7GH1', color: '#ffea00' },
-        { name: 'Cranes Dispatch', url: 'https://mcleodnz.slack.com/archives/C05TF9BVC74', color: '#ffea00' },
-        { name: 'Hiab Dispatch', url: 'https://mcleodnz.slack.com/archives/C05U4952SD6', color: '#ffea00' }
+        { name: 'Tauranga Hiabs', url: 'https://mcleodnz.slack.com/archives/C05TF6U7GH1', color: '#ffea00' }
       ]
     }
   ];
